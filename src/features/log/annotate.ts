@@ -239,7 +239,14 @@ class AnnotationController implements vscode.Disposable {
     }
     if (uri.scheme !== 'file') return undefined;
     const repo = this.ctx.repos.getForFile(uri.fsPath);
-    return repo ? { repo, path: repo.relPath(uri.fsPath) } : undefined;
+    if (repo) return { repo, path: repo.relPath(uri.fsPath) };
+    // Remote and WSL providers can return a URI with a normalized path shape.
+    const normalized = uri.fsPath.replaceAll(String.fromCharCode(92), '/');
+    const candidate = this.ctx.repos.repositories.find(r => {
+      const root = r.root.replaceAll(String.fromCharCode(92), '/').replace(/\/$/, '');
+      return normalized === root || normalized.startsWith(root + '/');
+    });
+    return candidate ? { repo: candidate, path: candidate.relPath(uri.fsPath) } : undefined;
   }
 
   private async load(key: string) {
