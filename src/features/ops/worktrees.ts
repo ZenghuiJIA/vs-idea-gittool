@@ -11,6 +11,7 @@ import { showError } from '../../host/webviewHost';
 import { repoFor, RootArg } from './common';
 import { createWorktree, listWorktrees, removeWorktree, samePath, Worktree } from './engine';
 import { ijIcon } from './icons';
+import { confirmDestructive, previewDestructive } from '../../operations/safety';
 
 // Git worktrees: the "Worktrees" tab of the Git tool window (GitWorktreesTabPanel), New Worktree dialog
 // (GitWorkingTreeDialog) and the worktree actions of the branches popup.
@@ -239,7 +240,7 @@ export async function deleteWorktreeCommand(ctx: Ctx, view: WorktreesView, arg?:
       { modal: true, detail: `${outcome.output}\n\n${translate('Delete the worktree anyway? Local changes in it will be lost.')}` },
       translate('Delete Worktree'),
     );
-    if (force) outcome = await withProgress(translate('Deleting worktree…'), () => removeWorktree(repo, wt.path, true), { location: 'window' });
+    if (force && await confirmDestructive(previewDestructive(repo, translate('Force Delete Worktree'), wt.path))) outcome = await withProgress(translate('Deleting worktree…'), () => removeWorktree(repo, wt.path, true), { location: 'window' });
   }
   await repo.refresh();
   view.refresh();

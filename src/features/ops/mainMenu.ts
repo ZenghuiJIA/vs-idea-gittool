@@ -81,6 +81,7 @@ export function mainMenuItems(repo: Repository | undefined): MenuItem[] {
     item(translate('Worktrees…'), 'ideagittool.worktrees.show'),
     sep(),
     item(translate('Show Git Log'), 'ideagittool.showLog', { icon: 'toolwindows/vcs', args: root }),
+    item(translate('Git Diagnostics'), 'ideagittool.diagnostics', { args: root }),
     {
       label: translate('Patch'),
       description: '▸',

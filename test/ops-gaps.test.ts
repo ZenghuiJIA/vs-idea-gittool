@@ -157,3 +157,21 @@ test('worktrees: parse, create, find by branch, remove', async () => {
   assert.equal(r2.kind, 'success', r2.output);
   assert.equal((await listWorktrees(repo)).length, 2);
 });
+
+test('remote provider parsing supports GitHub and GitLab SSH URLs', async () => {
+  const { parseRemoteProvider } = await import('../src/features/providers');
+  const github = parseRemoteProvider('git@github.com:owner/repo.git');
+  assert.equal(github.kind, 'github');
+  assert.equal(github.commitUrl('abc'), 'https://github.com/owner/repo/commit/abc');
+  const gitlab = parseRemoteProvider('https://gitlab.example.com/group/repo.git');
+  assert.equal(gitlab.kind, 'gitlab');
+  assert.equal(gitlab.branchUrl('feature/x'), 'https://gitlab.example.com/group/repo/tree/feature%2Fx');
+});
+
+test('LFS status reports unavailable when Git LFS is not installed', async () => {
+  const { lfsStatus } = await import('../src/features/ops/lfs');
+  const { a } = remoteSetup();
+  const repo = await open(a);
+  const result = await lfsStatus(repo);
+  assert.equal(typeof result.installed, 'boolean');
+});

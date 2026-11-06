@@ -10,9 +10,14 @@ import { openChangeDiff } from '../../host/gitContent';
 import { withProgress } from '../../host/ui';
 import { CancelledError, showError } from '../../host/webviewHost';
 import { Change } from '../../shared/types';
+import { confirmDestructive, previewDestructive } from '../../operations/safety';
 import { commitChanges } from './changes';
 import { abortLabel, capitalize, currentName, operationName, putLocalHistoryLabel, repoFor, reportOutcome, RootArg, withSmartOperation } from './common';
 import {
+  bisectMark,
+  BisectMark,
+  bisectReset,
+  bisectStart,
   commitMessages,
   dropCommits,
   fixupInto,
@@ -121,15 +126,7 @@ export async function dropCommand(ctx: Ctx, arg: CommitsArg) {
   await ensureInCurrentBranch(repo, hashes, translate('drop commits'));
   const n = hashes.length;
   const drop = translate('Drop');
-  const a = await vscode.window.showWarningMessage(
-    n === 1 ? translate('Drop Commit') : translate('Drop Commits'),
-    {
-      modal: true,
-      detail: n === 1 ? translate('Do you want to drop {0} commit from the {1} branch?', n, repo.info.branch ?? '') : translate('Do you want to drop {0} commits from the {1} branch?', n, repo.info.branch ?? ''),
-    },
-    drop,
-  );
-  if (a !== drop) return;
+  if (!(await confirmDestructive(previewDestructive(repo, n === 1 ? translate('Drop Commit') : translate('Drop Commits'), hashes.map(h => h.slice(0, 8)).join(', '))))) return;
   const old = repo.info.headHash;
   const outcome = await withProgress(translate('Dropping commits…'), () => repo.batch(() => dropCommits(repo, hashes)), { location: 'window' });
   if (await reportOutcome(repo, outcome, { operation: 'rebase', failedTitle: translate("Couldn't drop commits") })) await notifyWithUndo(repo, n === 1 ? translate('Dropped {0} commit', n) : translate('Dropped {0} commits', n), old);
@@ -228,9 +225,8 @@ export async function resetCommand(ctx: Ctx, arg?: RootArg & { hash?: string }) 
   );
   if (!res) return;
   const target = arg?.hash ? commits[0].hash : res.target || 'HEAD';
-  if (res.mode === 'hard' && (repo.status.changes.length > 0)) {
-    const a = await vscode.window.showWarningMessage(translate('Hard Reset'), { modal: true, detail: translate('Any local changes will be lost. Continue?') }, translate('Hard Reset'));
-    if (!a) return;
+  if (res.mode === 'hard') {
+    if (!(await confirmDestructive(previewDestructive(repo, translate('Hard Reset'), target)))) return;
   }
   await putLocalHistoryLabel(repo, translate('Before Reset'));
   const outcome = await withProgress(translate('Git Reset'), () => repo.batch(() => runConflictAware(repo, ['reset', `--${res.mode}`, target])), { location: 'window' });
@@ -292,12 +288,7 @@ export async function abortCommand(ctx: Ctx, arg?: RootArg) {
     bisect: translate('Bisect'),
   };
   const abort = translate('Abort');
-  const a = await vscode.window.showWarningMessage(
-    abortLabel(op),
-    { modal: true, detail: translate('Abort {0} in {1}?', operationName(op), repo.name) },
-    abort,
-  );
-  if (a !== abort) return;
+  if (!(await confirmDestructive(previewDestructive(repo, abortLabel(op), operationName(op))))) return;
   const args = op === 'bisect' ? ['bisect', 'reset'] : [op, '--abort'];
   const r = await repo.batch(() => repo.exec(args, { allowFailure: true }));
   if (r.exitCode === 0) void vscode.window.showInformationMessage(op === 'rebase' ? translate('Abort rebase succeeded') : translate('{0} aborted', names[op]));
@@ -566,12 +557,21 @@ export async function applyPatchCommand(ctx: Ctx, arg?: RootArg & { clipboard?: 
   if (!input.trim()) throw new Error(translate('The patch is empty'));
   const check = await repo.exec(['apply', '--check', '-'], { input, allowFailure: true });
   const args = check.exitCode === 0 ? ['apply', '-'] : ['apply', '--3way', '-'];
+  const before = (await repo.execText(['rev-parse', 'HEAD'], { quiet: true, allowFailure: true })).trim();
   const r = await repo.batch(() => repo.exec(args, { input, allowFailure: true }));
   if (r.exitCode === 0) void vscode.window.showInformationMessage(translate('Patch applied'));
   else if (/conflict/i.test(r.stderr)) {
     const res = await vscode.commands.executeCommand<{ remaining?: number } | undefined>('ideagittool.resolveConflicts', { root: repo.root }).then(undefined, () => undefined);
     if (res?.remaining !== 0) void vscode.window.showWarningMessage(translate('Patch applied with conflicts'));
-  } else showError(r.stderr, translate('Patch was not applied'));
+  } else {
+    const rollback = translate('Rollback Patch');
+    const a = await vscode.window.showErrorMessage(translate('Patch was not applied'), rollback);
+    if (a === rollback) {
+      const status = await repo.exec(['reset', '--merge', before || 'HEAD'], { allowFailure: true });
+      if (status.exitCode !== 0) showError(status.stderr, translate('Patch rollback failed'));
+      else void vscode.window.showInformationMessage(translate('Patch rollback successful'));
+    } else showError(r.stderr, translate('Patch was not applied'));
+  }
 }
 
 // ------------------------------------------------------------------ checkout revision
@@ -585,3 +585,26 @@ export async function checkoutRevisionCommand(ctx: Ctx, arg: CommitArg) {
 }
 
 export type { OperationOutcome };
+
+// ------------------------------------------------------------------ bisect
+
+export async function bisectStartCommand(ctx: Ctx, arg?: RootArg & { bad?: string; good?: string }) {
+  const repo = await repoFor(ctx, arg);
+  const bad = arg?.bad ?? 'HEAD';
+  const good = arg?.good ?? (await vscode.window.showInputBox({ prompt: translate('Enter a known good commit'), value: 'HEAD~1' }));
+  if (!good) return;
+  const outcome = await withProgress(translate('Starting Bisect…'), () => repo.batch(() => bisectStart(repo, bad, good)), { location: 'window' });
+  await reportOutcome(repo, outcome, { operation: 'bisect', failedTitle: translate('Bisect failed') });
+}
+
+export async function bisectMarkCommand(ctx: Ctx, mark: BisectMark, arg?: RootArg) {
+  const repo = await repoFor(ctx, arg);
+  const outcome = await withProgress(translate('Marking commit {0}…', mark), () => repo.batch(() => bisectMark(repo, mark)), { location: 'window' });
+  await reportOutcome(repo, outcome, { operation: 'bisect', failedTitle: translate('Bisect failed') });
+}
+
+export async function bisectResetCommand(ctx: Ctx, arg?: RootArg) {
+  const repo = await repoFor(ctx, arg);
+  const outcome = await withProgress(translate('Resetting Bisect…'), () => repo.batch(() => bisectReset(repo)), { location: 'window' });
+  await reportOutcome(repo, outcome, { operation: 'bisect', failedTitle: translate('Bisect reset failed') });
+}

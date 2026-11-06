@@ -14,6 +14,7 @@ import { Change } from '../../shared/types';
 import { commitChanges } from './changes';
 import { currentName, repoFor, reportOutcome, reportRestore, RootArg, settings } from './common';
 import { updateWithSavedChanges } from './update';
+import { confirmDestructive, previewDestructive } from '../../operations/safety';
 import { countCommits, fetch, push, PushSpec, pushSuccessMessage, runConflictAware, updateRepository, UpdateMethod, updateSummary } from './engine';
 
 interface PushCommit {
@@ -133,12 +134,10 @@ export async function pushCommand(ctx: Ctx, arg?: RootArg & { upTo?: string; bra
   if (result.force) {
     const targets = result.repos.map(x => `${x.remote}/${x.target}`).join(', ');
     const forcePush = translate('Force Push');
-    const a = await vscode.window.showWarningMessage(
-      forcePush,
-      { modal: true, detail: translate("You're going to force push to {0}. It may overwrite commits at the remote. Are you sure you want to proceed?", targets) },
-      forcePush,
-    );
-    if (a !== forcePush) return;
+    for (const item of result.repos) {
+      const repo = ctx.repos.get(item.root);
+      if (repo && !(await confirmDestructive(previewDestructive(repo, forcePush, `${item.remote}/${item.target}`)))) return;
+    }
   }
   await settings().update('push.tags', result.tags, vscode.ConfigurationTarget.Global);
   await settings().update('push.runHooks', result.runHooks, vscode.ConfigurationTarget.Global);

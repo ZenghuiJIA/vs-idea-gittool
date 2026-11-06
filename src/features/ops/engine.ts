@@ -836,3 +836,61 @@ export function prettySquash(messages: string[]): string {
   }
   return out.join('\n\n\n');
 }
+
+// ------------------------------------------------------------------ bisect
+
+export type BisectMark = 'good' | 'bad' | 'skip';
+
+export interface BisectState {
+  active: boolean;
+  current?: string;
+  log: string;
+}
+
+export async function bisectState(repo: Repository): Promise<BisectState> {
+  const active = repo.detectOperation() === 'bisect';
+  const log = await repo.execText(['bisect', 'log'], { allowFailure: true, quiet: true });
+  return { active, current: repo.info.headHash, log };
+}
+
+export async function bisectStart(repo: Repository, bad: string, good: string): Promise<OperationOutcome> {
+  if (repo.detectOperation() !== 'none') {
+    return { kind: 'error', output: 'Another Git operation is already in progress', error: new GitError('Another Git operation is already in progress', ['bisect', 'start'], 1, '', '') };
+  }
+  return runConflictAware(repo, ['bisect', 'start', bad, good]);
+}
+
+export async function bisectMark(repo: Repository, mark: BisectMark): Promise<OperationOutcome> {
+  if (repo.detectOperation() !== 'bisect') {
+    return { kind: 'error', output: 'Git bisect is not in progress', error: new GitError('Git bisect is not in progress', ['bisect', mark], 1, '', '') };
+  }
+  return runConflictAware(repo, ['bisect', mark]);
+}
+
+export async function bisectReset(repo: Repository): Promise<OperationOutcome> {
+  if (repo.detectOperation() !== 'bisect') return { kind: 'success', output: '' };
+  return runConflictAware(repo, ['bisect', 'reset']);
+}
+
+export interface RebaseStatus {
+  active: boolean;
+  headName?: string;
+  onto?: string;
+  current?: string;
+  remaining?: number;
+  total?: number;
+  todoPath?: string;
+}
+
+export async function rebaseStatus(repo: Repository): Promise<RebaseStatus> {
+  const gitDir = repo.gitDir;
+  const merge = path.join(gitDir, 'rebase-merge');
+  const apply = path.join(gitDir, 'rebase-apply');
+  const dir = fs.existsSync(merge) ? merge : fs.existsSync(apply) ? apply : undefined;
+  if (!dir) return { active: false };
+  const read = (name: string) => { try { return fs.readFileSync(path.join(dir, name), 'utf8').trim(); } catch { return undefined; } };
+  const count = (name: string) => { try { return fs.readFileSync(path.join(dir, name), 'utf8').split(/\r?\n/).filter(Boolean).length; } catch { return undefined; } };
+  const total = count('git-rebase-todo');
+  const done = count('done');
+  return { active: true, headName: read('head-name')?.replace(/^refs\/heads\//, ''), onto: read('onto'), current: read('msgnum'), remaining: total, total: (total ?? 0) + (done ?? 0), todoPath: path.join(dir, 'git-rebase-todo') };
+}

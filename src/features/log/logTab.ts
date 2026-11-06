@@ -351,6 +351,8 @@ export class LogTab implements vscode.Disposable {
       isHead: hashes.length === 1 && hashes[0] === repo.info.headHash,
       refs,
       webUrl: hashes.length === 1 ? webCommitUrl(repo, hashes[0]) : undefined,
+      webBranchUrl: hashes.length === 1 && repo.info.branch ? webBranchUrl(repo, repo.info.branch) : undefined,
+      webFileUrl: hashes.length === 1 ? webFileUrl(repo, this.state.mode === 'history' ? (this.state.filters.paths[0] ?? '') : '') : undefined,
       operation: repo.info.operation,
       mixedRoots,
       hasRemoteBranches: repo.refs.some(r => r.type === 'remote'),
@@ -891,6 +893,23 @@ export function webCommitUrl(repo: Repository, hash: string): string | undefined
   if (base.includes('bitbucket.org')) return `${base}/commits/${hash}`;
   if (base.includes('gitlab')) return `${base}/-/commit/${hash}`;
   return `${base}/commit/${hash}`;
+}
+
+export function webBranchUrl(repo: Repository, branch: string): string | undefined {
+  const base = remoteWebUrl((repo.remotes.find(r => r.name === 'origin') ?? repo.remotes[0])?.fetchUrl ?? '');
+  if (!base) return undefined;
+  if (base.includes('bitbucket.org')) return `${base}/src/${encodeURIComponent(branch)}`;
+  if (base.includes('gitlab')) return `${base}/-/tree/${encodeURIComponent(branch)}`;
+  return `${base}/tree/${encodeURIComponent(branch)}`;
+}
+
+export function webFileUrl(repo: Repository, file: string, ref = 'HEAD'): string | undefined {
+  const base = remoteWebUrl((repo.remotes.find(r => r.name === 'origin') ?? repo.remotes[0])?.fetchUrl ?? '');
+  if (!base) return undefined;
+  const normalized = file.replaceAll(String.fromCharCode(92), '/');
+  if (base.includes('bitbucket.org')) return `${base}/src/${encodeURIComponent(ref)}/${normalized}`;
+  if (base.includes('gitlab')) return `${base}/-/blob/${encodeURIComponent(ref)}/${normalized}`;
+  return `${base}/blob/${encodeURIComponent(ref)}/${normalized}`;
 }
 
 export function remoteWebUrl(url: string): string | undefined {

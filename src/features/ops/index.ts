@@ -9,6 +9,8 @@ import { BranchesTab } from './branchesTab';
 import { activeRepo } from './common';
 import * as u from './update';
 import * as w from './worktrees';
+import { lfsStatus } from './lfs';
+import { providerForRemote } from '../providers';
 
 /**
  * Git operations: Branches tab, push / update / pull / fetch, merge / rebase,
@@ -33,6 +35,8 @@ export function register(ctx: Ctx) {
   c('ideagittool.clone', () => r.cloneCommand(ctx));
   c('ideagittool.init', () => r.initCommand(ctx));
   c('ideagittool.unshallow', (arg?: { root?: string }) => r.unshallowCommand(ctx, normalize(arg)));
+  c('ideagittool.lfsStatus', async (arg?: { root?: string }) => { const repo = await repoFor(ctx, normalize(arg)); return lfsStatus(repo); });
+  c('ideagittool.openRemote', async (arg: { root: string; kind: 'commit' | 'branch' | 'file'; value: string; path?: string }) => { const repo = await repoFor(ctx, arg); const remote = repo.remotes[0]; const provider = remote && providerForRemote(remote.fetchUrl); if (!provider) return; const url = arg.kind === 'commit' ? provider.commitUrl(arg.value) : arg.kind === 'branch' ? provider.branchUrl(arg.value) : provider.fileUrl(arg.path ?? '', arg.value); if (url) await vscode.env.openExternal(vscode.Uri.parse(url)); });
 
   // Branches
   c('ideagittool.branches', () => ctx.commitView?.reveal('branches'));
@@ -95,6 +99,11 @@ export function register(ctx: Ctx) {
   c('ideagittool.abortOperation', (arg?: { root?: string }) => h.abortCommand(ctx, normalize(arg)));
   c('ideagittool.continueOperation', (arg?: { root?: string }) => h.continueCommand(ctx, normalize(arg)));
   c('ideagittool.skipCommit', (arg?: { root?: string }) => h.skipCommand(ctx, normalize(arg)));
+  c('ideagittool.bisect.start', (arg?: { root?: string; bad?: string; good?: string }) => h.bisectStartCommand(ctx, normalize(arg)));
+  c('ideagittool.bisect.good', (arg?: { root?: string }) => h.bisectMarkCommand(ctx, 'good', normalize(arg)));
+  c('ideagittool.bisect.bad', (arg?: { root?: string }) => h.bisectMarkCommand(ctx, 'bad', normalize(arg)));
+  c('ideagittool.bisect.skip', (arg?: { root?: string }) => h.bisectMarkCommand(ctx, 'skip', normalize(arg)));
+  c('ideagittool.bisect.reset', (arg?: { root?: string }) => h.bisectResetCommand(ctx, normalize(arg)));
 }
 
 /** Menus pass a URI or SourceControl; command palette passes nothing. Only plain `{root}` objects are kept. */

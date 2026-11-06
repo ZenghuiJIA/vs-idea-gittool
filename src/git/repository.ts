@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { Change, ChangeStatus, OngoingOperation, Ref, Remote, RepoInfo, Stash } from '../shared/types';
 import { ExecOptions, ExecResult, git, splitNul } from './exec';
+import { OperationSession, operations } from '../operations/session';
 
 export interface StatusSnapshot {
   changes: Change[];
@@ -33,6 +34,7 @@ export class Repository implements vscode.Disposable {
   private pendingRefs = false;
   private refreshing: Promise<void> | undefined;
   private suspendDepth = 0;
+  private operationSession: OperationSession | undefined;
 
   constructor(
     readonly root: string,
@@ -78,7 +80,27 @@ export class Repository implements vscode.Disposable {
 
   /** Runs git in this repository. */
   exec(args: string[], opts: Omit<ExecOptions, 'cwd'> = {}): Promise<ExecResult> {
-    return git(args, { cwd: this.root, ...opts });
+    const session = this.operationSession;
+    return git(args, { cwd: this.root, operation: session?.operation, sessionId: session?.id, ...opts });
+  }
+
+  /** Runs a write operation while holding the repository lock. */
+  async withWriteOperation<T>(operation: string, fn: (session: OperationSession) => Promise<T>): Promise<T> {
+    const session = operations.start(this.root, operation);
+    this.operationSession = session;
+    try {
+      session.setPhase('running');
+      const result = await fn(session);
+      session.setPhase('refreshing');
+      await this.refresh();
+      operations.finish(session, 'success');
+      return result;
+    } catch (error) {
+      operations.finish(session, session.cancelRequested ? 'cancelled' : 'error');
+      throw error;
+    } finally {
+      if (this.operationSession === session) this.operationSession = undefined;
+    }
   }
 
   async execText(args: string[], opts: Omit<ExecOptions, 'cwd'> = {}): Promise<string> {

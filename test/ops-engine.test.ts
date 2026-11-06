@@ -201,3 +201,20 @@ test('parsers and validators', async () => {
   assert.match(validateNewBranch(repo, 'a..b', false)!, /not valid/);
   assert.equal(validateNewBranch(repo, 'HEAD', false), 'HEAD is a reserved keyword');
 });
+
+test('bisect start, mark and reset follow Git state', async () => {
+  const dir = makeRepo(['a', 'b', 'c', 'd']);
+  const repo = await open(dir);
+  let r = await import('../src/features/ops/engine').then(m => m.bisectStart(repo, 'HEAD', 'HEAD~3'));
+  assert.equal(r.kind, 'success', r.output);
+  assert.equal(repo.detectOperation(), 'bisect');
+  await repo.refresh();
+  r = await import('../src/features/ops/engine').then(m => m.bisectMark(repo, 'good'));
+  assert.ok(['success', 'stopped'].includes(r.kind), r.output);
+  await repo.refresh();
+  assert.equal(repo.detectOperation(), 'bisect');
+  r = await import('../src/features/ops/engine').then(m => m.bisectReset(repo));
+  assert.equal(r.kind, 'success', r.output);
+  await repo.refresh();
+  assert.equal(repo.detectOperation(), 'none');
+});

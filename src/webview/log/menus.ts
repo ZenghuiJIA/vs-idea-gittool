@@ -73,6 +73,8 @@ export async function commitMenu(anchor: Anchor) {
   if (info.webUrl) {
     const host = /github/.test(info.webUrl) ? 'GitHub' : /gitlab/.test(info.webUrl) ? 'GitLab' : /bitbucket/.test(info.webUrl) ? 'Bitbucket' : 'Browser';
     entries.push({ separator: true }, { label: host === 'Browser' ? t('Open in Browser') : t('Open on {0}', host), icon: host === 'GitHub' ? 'vcs/github' : 'toolwindows/web', action: () => send('openUrl', info.webUrl) });
+    if (info.webBranchUrl) entries.push({ label: t('Open Current Branch on {0}', host), action: () => send('openUrl', info.webBranchUrl) });
+    if (info.webFileUrl) entries.push({ label: t('Open File on {0}', host), action: () => send('openUrl', info.webFileUrl) });
   }
   showMenu(store.init.mode === 'history' ? historyMenu(info, rows.length) : entries, anchor);
 }

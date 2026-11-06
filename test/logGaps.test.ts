@@ -136,3 +136,10 @@ test('collapse linear branches hides the middle of linear fragments', async () =
   model.dispose();
   repo.dispose();
 });
+
+test('remote URLs support branches and files', async () => {
+  const { webBranchUrl, webFileUrl } = await import('../src/features/log/logTab');
+  const repo = { remotes: [{ name: 'origin', fetchUrl: 'git@github.com:owner/repo.git' }] } as any;
+  assert.equal(webBranchUrl(repo, 'feature/x'), 'https://github.com/owner/repo/tree/feature%2Fx');
+  assert.equal(webFileUrl(repo, 'src/app.ts', 'feature/x'), 'https://github.com/owner/repo/blob/feature%2Fx/src/app.ts');
+});

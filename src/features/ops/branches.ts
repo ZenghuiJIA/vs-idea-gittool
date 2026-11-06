@@ -15,6 +15,7 @@ import { checkWorktreeConflict } from './worktrees';
 import { checkout, isAncestor, validateNewBranch, worktreeOfBranch } from './engine';
 import { merge, rebase } from './history';
 import { ijIcon } from './icons';
+import { confirmDestructive, previewDestructive } from '../../operations/safety';
 import { pull, pushCommand } from './remote';
 import { updateProjectCommand } from './update';
 
@@ -326,6 +327,7 @@ export async function deleteBranch(ctx: Ctx, arg: BranchArg) {
   if (!ref) throw new Error(translate('Branch {0} not found', arg.name));
   if (ref.type === 'remote') return deleteRemoteBranch(ctx, repo, ref);
   if (ref.current) throw new Error(translate('Cannot delete the current branch {0}', ref.name));
+  if (!(await confirmDestructive(previewDestructive(repo, translate('Delete Branch'), ref.name)))) return;
   const r = await repo.exec(['branch', '-d', ref.name], { allowFailure: true });
   if (r.exitCode !== 0) {
     if (!/not fully merged/.test(r.stderr)) return showError(r.stderr, translate('Could not delete {0}', ref.name));

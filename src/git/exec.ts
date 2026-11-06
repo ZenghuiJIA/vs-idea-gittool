@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import * as vscode from 'vscode';
 import { translate } from '../shared/l10n';
 import { log } from '../host/output';
+import { operations } from '../operations/session';
 
 export class GitError extends Error {
   constructor(
@@ -17,6 +18,8 @@ export class GitError extends Error {
 
 export interface ExecOptions {
   cwd: string;
+  operation?: string;
+  sessionId?: string;
   input?: string | Buffer;
   env?: Record<string, string>;
   token?: vscode.CancellationToken;
@@ -72,7 +75,10 @@ export function git(args: string[], opts: ExecOptions): Promise<ExecResult> {
         for (const p of parts) if (p.trim()) opts.onStderrLine(p);
       }
     });
-    const sub = opts.token?.onCancellationRequested(() => child.kill());
+    const sub = opts.token?.onCancellationRequested(() => {
+      operations.current(opts.cwd);
+      child.kill();
+    });
     child.on('error', e => {
       sub?.dispose();
       reject(new GitError(translate('Cannot run git: {0}', e.message), args, null, '', String(e)));
@@ -82,6 +88,7 @@ export function git(args: string[], opts: ExecOptions): Promise<ExecResult> {
       const buffer = Buffer.concat(out);
       const stdout = opts.binary ? '' : buffer.toString('utf8');
       const stderr = Buffer.concat(err).toString('utf8');
+      operations.record({ sessionId: opts.sessionId ?? 'untracked', root: opts.cwd, operation: opts.operation ?? args[0] ?? 'git', args: [...args], exitCode: code, stdout, stderr, startedAt: started, durationMs: Date.now() - started, outcome: code === 0 ? 'success' : (opts.token?.isCancellationRequested ? 'cancelled' : 'failed') });
       if (!opts.quiet && Date.now() - started > 1000) log(`  (${Date.now() - started} ms)`);
       if (code !== 0 && !opts.allowFailure) {
         if (!opts.quiet) log(stderr.trim());

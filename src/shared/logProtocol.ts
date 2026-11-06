@@ -193,6 +193,8 @@ export interface ContextInfo {
   refs: Ref[];
   /** URL of the commit on GitHub / GitLab / Bitbucket, when the remote is a known host. */
   webUrl?: string;
+  webBranchUrl?: string;
+  webFileUrl?: string;
   operation: string;
   /** Selected commits belong to more than one repository. */
   mixedRoots?: boolean;
