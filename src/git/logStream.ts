@@ -89,6 +89,7 @@ export class LogStream {
   }
 
   private cancelled = false;
+  private readonly sessionId = `log-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
   private wake() {
     const w = this.waiters;
