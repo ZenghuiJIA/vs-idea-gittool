@@ -211,6 +211,7 @@ export function CommitTab({ state, visible }: { state: CommitViewState; visible:
       { label: t('Move to Another Changelist…'), shortcut: 'Alt+Shift+M', disabled: !tracked.length, action: () => send('moveToChangelist', { keys: keysOf(tracked) }) },
       { label: t('Show Diff'), icon: 'vcs/diff', shortcut: 'Ctrl+D', disabled: !files.length, action: () => showDiff(files) },
       { label: t('Jump to Source'), shortcut: 'F4', disabled: !files.some(f => f.status !== 'D'), action: () => openSource(files) },
+      { separator: true },
       {
         label: t('Copy Path/Reference…'),
         disabled: !files.length,
