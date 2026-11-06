@@ -8,6 +8,7 @@ import { activeRepo } from './ops/common';
 
 export interface GitDiagnostics {
   gitPath: string;
+  remoteName?: string;
   gitVersion: string;
   workspaceFolders: string[];
   repositories: Array<{
@@ -38,6 +39,7 @@ export async function collectDiagnostics(ctx: Ctx): Promise<GitDiagnostics> {
   const credentialHelpers = first ? await loadCredentialHelpers(first) : [];
   return {
     gitPath: getGitPath(),
+    remoteName: vscode.env.remoteName,
     gitVersion,
     workspaceFolders: (vscode.workspace.workspaceFolders ?? []).map(f => f.uri.fsPath),
     repositories: ctx.repos.repositories.map(repo => ({
@@ -71,6 +73,7 @@ export function formatDiagnostics(data: GitDiagnostics): string {
   const lines = [
     `Git path: ${data.gitPath}`,
     `Git version: ${data.gitVersion}`,
+    `Remote authority: ${data.remoteName ?? '(local)'}`,
     `Workspace folders: ${data.workspaceFolders.join(', ') || '(none)'}`,
     `Credential helpers: ${data.credentialHelpers.join(', ') || '(none)'}`,
     '',

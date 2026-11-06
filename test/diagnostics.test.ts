@@ -5,6 +5,7 @@ import { formatDiagnostics, GitDiagnostics } from '../src/features/diagnostics';
 test('diagnostics formatter includes safe repository details', () => {
   const data: GitDiagnostics = {
     gitPath: 'git',
+    remoteName: 'ssh-remote',
     gitVersion: 'git version 2.45.0',
     workspaceFolders: ['C:/workspace'],
     repositories: [{ root: 'C:/workspace/repo', gitDir: 'C:/workspace/repo/.git', commonDir: 'C:/workspace/repo/.git', branch: 'main', operation: 'none', ahead: 1, behind: 2, shallow: false }],
